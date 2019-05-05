@@ -1,0 +1,58 @@
+server:
+  port: 8080
+
+spring:
+  profiles:
+    active: test
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver #mysql数据库连接信息
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      maximum-pool-size: 50 #连接池最大连接数
+      minimum-idle: 25 #允许的最小空闲属
+      idle-timeout: 180000 #空闲超时是 180000 毫秒，当数据库连接的空闲时间大于180000毫秒时，这些空闲超时的连接会被关闭，直到超时的空闲连接数达到 minimum-idle的值
+      connection-test-query: select 1 #测试连接是否可用的query 语句 在oracle是 select 1 from dual
+  jpa:
+    hibernate:
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl #取消springData中字段的驼峰命名
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    lettuce: #lettuce客户端
+      pool:
+        min-idle: 0
+        max-idle: 8
+      shutdown-timeout: 3000
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+    publisher-confirms: true #消息发送到交换机，是否确认回调
+    publisher-returns: true #消息发送到交换机，是否返回回调
+    listener: # 开启ACK
+      direct:
+        acknowledge-mode: manual #采用手动应答
+      simple:
+        concurrency: 1 #指定最小的消费者数量
+        max-concurrency: 1 #指定对打的消费者数量
+        retry:
+          enabled: true #是否支持重试
+  task: #线程池
+    pool:
+      corePoolSize: 10
+      maxPoolSize: 20
+      keepAliveSeconds: 300
+      queueCapacity: 500
+
+log: #队列配置
+  user:
+    queue:
+      name: ${spring.profiles.active}.log.user.queue
+    exchange:
+      name: ${spring.profiles.active}.log.user.exchange
+    routing:
+      key:
+        name: ${spring.profiles.active}.log.user.routing.key
