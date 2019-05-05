@@ -1,16 +1,21 @@
 package com.jhlc.record.core.aop;
 
+import com.jhlc.record.conmmon.utils.MD5Util;
 import com.jhlc.record.controller.resp.Result;
 import com.jhlc.record.controller.resp.ResultEnum;
 import com.jhlc.record.controller.resp.ResultUtils;
 import com.jhlc.record.core.redis.RedisService;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.Signature;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import java.util.stream.Stream;
 
 
@@ -37,15 +42,32 @@ public class ControlAccessInterceptor {
      */
     @Around("@annotation(com.jhlc.record.core.annotation.ControlAccess)")
     public Result around(ProceedingJoinPoint proceedingJoinPoint) {
-        Object[] parms = proceedingJoinPoint.getArgs();
         String methodName = proceedingJoinPoint.getSignature().getName();
-        StringBuilder redisKey = new StringBuilder(methodName);
-        Stream.of(parms).forEach(o -> redisKey.append(o));
+        //1.获取方法所有入参
+        Object[] args = proceedingJoinPoint.getArgs();
+        //2.最关键的一步:通过这获取到方法的所有参数名称的字符串数组
+        Signature signature = proceedingJoinPoint.getSignature();
+        MethodSignature methodSignature = (MethodSignature) signature;
+        String[] parameterNames = methodSignature.getParameterNames();
+        //3.拼装redis入参
+        StringBuilder sb = new StringBuilder("{");
+        for (int i = 0; i < parameterNames.length; i++) {
+            if (args[i] == null || args[i] instanceof HttpServletRequest || args[i] instanceof HttpServletResponse) {
+                continue;
+            }
+            sb.append("\"").append(parameterNames[i].trim()).append("\"").append(":\"").append(args[i].toString().trim()).append("\",");
+        }
+        sb.deleteCharAt(sb.lastIndexOf(","));
+        sb.append("}");
+        String redisKey = methodName + "_" + MD5Util.md5Hex(sb.toString());
+        String redisValue = sb.toString();
+        log.info("请求参数++++++" + redisKey + ":" + redisValue);
+
         Result result;
         try {
-            if (redisService.setIfAbsent(redisKey.toString(),true,exptime)) {
+            if (redisService.setIfAbsent(redisKey,redisValue,exptime)) {
                 result = (Result) proceedingJoinPoint.proceed();
-                redisService.del(redisKey.toString());
+                redisService.del(redisKey);
             } else {
                 result = ResultUtils.success(ResultEnum.MAS_REQUEST_CODE);
             }
@@ -53,7 +75,7 @@ public class ControlAccessInterceptor {
             throwable.printStackTrace();
             result = ResultUtils.error(ResultEnum.EXCEPTION);
         }finally {
-            redisService.del(redisKey.toString());
+            redisService.del(redisKey);
         }
         return result;
     }
